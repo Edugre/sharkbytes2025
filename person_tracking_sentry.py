@@ -62,6 +62,12 @@ TILT_INVERT = -1  # Set to -1 if servo moves opposite direction
 TARGET_LOST_TIMEOUT = 2.0  # Seconds before considering target lost
 PERSON_CLASS_ID = 0  # COCO class ID for person
 
+# Face detection parameters
+FACE_PRIORITY = True  # Prioritize face tracking over body tracking
+FACE_SCALE_FACTOR = 1.1  # Face detection scale factor
+FACE_MIN_NEIGHBORS = 5  # Minimum neighbors for face detection
+FACE_MIN_SIZE = (30, 30)  # Minimum face size in pixels
+
 # Idle sweep parameters (when no target)
 SWEEP_SPEED = 0.5  # Degrees per frame
 SWEEP_MIN = 30
@@ -219,10 +225,29 @@ class PersonTrackingSentry:
         
         print(f"[CAMERA] Opened at {CAMERA_WIDTH}x{CAMERA_HEIGHT} @ {TARGET_FPS}fps")
         
+        # Check CUDA availability
+        import torch
+        if torch.cuda.is_available():
+            print(f"[GPU] CUDA Available: {torch.cuda.get_device_name(0)}")
+            print(f"[GPU] CUDA Version: {torch.version.cuda}")
+            print(f"[GPU] PyTorch Version: {torch.__version__}")
+        else:
+            print("[GPU] CUDA not available - using CPU (slower)")
+        
         # Initialize YOLO model
         print("[YOLO] Loading YOLOv11 model...")
         self.yolo_model = YOLO('yolo11n.pt')  # YOLOv11 Nano - faster and more accurate than v8
         print("[YOLO] Model loaded successfully")
+        
+        # Initialize face detector (Haar Cascade)
+        print("[FACE] Loading face detector...")
+        self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        if self.face_cascade.empty():
+            print("[FACE] Warning: Face detector failed to load - will use body tracking only")
+            self.face_detection_enabled = False
+        else:
+            print("[FACE] Face detector loaded successfully")
+            self.face_detection_enabled = True and FACE_PRIORITY
         
         # Initialize DeepSORT tracker
         print("[DEEPSORT] Initializing tracker...")
@@ -270,6 +295,58 @@ class PersonTrackingSentry:
         print("Sentry System Ready!")
         print("="*50 + "\n")
     
+    def detect_faces(self, frame, person_bbox):
+        """
+        Detect faces within a person's bounding box.
+        Returns (x, y) center of the largest face, or None if no faces found.
+        
+        Args:
+            frame: BGR frame from camera
+            person_bbox: [x1, y1, x2, y2] bounding box of detected person
+        
+        Returns:
+            tuple: (center_x, center_y) of largest face in absolute frame coordinates,
+                   or None if no face detected
+        """
+        if not self.face_detection_enabled:
+            return None
+        
+        x1, y1, x2, y2 = map(int, person_bbox)
+        
+        # Ensure bbox is within frame bounds
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+        
+        # Extract person region of interest
+        person_roi = frame[y1:y2, x1:x2]
+        
+        if person_roi.size == 0:
+            return None
+        
+        # Convert to grayscale for face detection
+        gray = cv2.cvtColor(person_roi, cv2.COLOR_BGR2GRAY)
+        
+        # Detect faces
+        faces = self.face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=FACE_SCALE_FACTOR,
+            minNeighbors=FACE_MIN_NEIGHBORS,
+            minSize=FACE_MIN_SIZE
+        )
+        
+        if len(faces) == 0:
+            return None
+        
+        # Find largest face (by area)
+        largest_face = max(faces, key=lambda f: f[2] * f[3])
+        fx, fy, fw, fh = largest_face
+        
+        # Convert face center from ROI coordinates to absolute frame coordinates
+        face_center_x = x1 + fx + fw // 2
+        face_center_y = y1 + fy + fh // 2
+        
+        return (face_center_x, face_center_y)
+    
     def detect_people(self, frame):
         """
         Detect people in frame using YOLO.
@@ -284,7 +361,7 @@ class PersonTrackingSentry:
             iou=0.5,   # IoU threshold for NMS
             imgsz=320,  # Match camera resolution for speed
             classes=[0],  # Only detect person class
-            half=False,  # Use FP16 if CUDA available (set to True after CUDA install for speed boost)
+            half=True,   # Enable FP16 for CUDA acceleration (2x faster on GPU)
             max_det=5,  # Limit to 5 detections max (we only need 1 person anyway)
             agnostic_nms=True  # Faster NMS
         )
@@ -427,6 +504,27 @@ class PersonTrackingSentry:
                 color = (0, 255, 0)  # Green
                 thickness = 3
                 label = f"TARGET ID:{track_id}"
+                
+                # Detect and draw face if this is the locked target
+                if FACE_PRIORITY and self.face_detection_enabled:
+                    face_center = self.detect_faces(frame, bbox)
+                    if face_center:
+                        # Draw face center point in yellow
+                        cv2.circle(frame, face_center, 5, (0, 255, 255), -1)
+                        cv2.putText(frame, "FACE", (face_center[0] - 20, face_center[1] - 10),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+                        
+                        # Draw line from body center to face center
+                        body_center = self.get_bbox_center(bbox)
+                        cv2.line(frame, body_center, face_center, (0, 255, 255), 1)
+                    else:
+                        # No face detected, show body center
+                        cx, cy = self.get_bbox_center(bbox)
+                        cv2.circle(frame, (cx, cy), 5, color, -1)
+                else:
+                    # Face tracking disabled, show body center
+                    cx, cy = self.get_bbox_center(bbox)
+                    cv2.circle(frame, (cx, cy), 5, color, -1)
             else:
                 color = (255, 100, 0)  # Blue
                 thickness = 2
@@ -438,11 +536,6 @@ class PersonTrackingSentry:
             # Draw label
             cv2.putText(frame, label, (x1, y1 - 10),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-            
-            # Draw center point for locked target
-            if self.target.is_locked and track_id == self.target.locked_id:
-                cx, cy = self.get_bbox_center(bbox)
-                cv2.circle(frame, (cx, cy), 5, (0, 255, 0), -1)
         
         # Draw frame center crosshair
         cv2.line(frame, (self.frame_center_x - 20, self.frame_center_y),
@@ -534,8 +627,16 @@ class PersonTrackingSentry:
                         self.target.update_target(track_id)
                         target_found = True
                         
-                        # Get target center
-                        target_x, target_y = self.get_bbox_center(bbox)
+                        # Get target center - prioritize face if detected
+                        if FACE_PRIORITY and self.face_detection_enabled:
+                            face_center = self.detect_faces(frame, bbox)
+                            if face_center:
+                                target_x, target_y = face_center
+                            else:
+                                # No face detected, fall back to body center
+                                target_x, target_y = self.get_bbox_center(bbox)
+                        else:
+                            target_x, target_y = self.get_bbox_center(bbox)
                         
                         # Drive servos to center target
                         self.control_servos_proportional(target_x, target_y)
