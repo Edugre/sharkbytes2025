@@ -57,11 +57,17 @@ TILT_INVERT = -1
 TARGET_LOST_TIMEOUT = 2.0
 PERSON_CLASS_ID = 0
 
+# Performance optimization
+DETECTION_SKIP_FRAMES = 3  # Run YOLO every N frames (1=every frame, 2=every other, 3=every third)
+YOLO_IMGSZ = 160  # Reduced from 320 for faster inference on Jetson
+TRACKING_UPDATE_SKIP = 3  # Run DeepSORT embedding every N frames (major bottleneck!)
+
 # Face detection parameters
 FACE_PRIORITY = True  # Prioritize face tracking over body tracking
-FACE_SCALE_FACTOR = 1.1  # Face detection scale factor
-FACE_MIN_NEIGHBORS = 5  # Minimum neighbors for face detection
-FACE_MIN_SIZE = (30, 30)  # Minimum face size in pixels
+FACE_SCALE_FACTOR = 1.2  # Increased for faster detection (was 1.1)
+FACE_MIN_NEIGHBORS = 4  # Reduced for faster detection (was 5)
+FACE_MIN_SIZE = (40, 40)  # Increased minimum size for faster detection
+FACE_DETECTION_SKIP_FRAMES = 5  # Run face detection every N frames when target locked
 
 
 # ========================================
@@ -178,6 +184,8 @@ class SentryService:
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
         self.cap.set(cv2.CAP_PROP_FPS, TARGET_FPS)
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffer lag
+        self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))  # Use MJPEG for faster decoding
 
         if not self.cap.isOpened():
             raise RuntimeError("Failed to open camera")
@@ -197,7 +205,15 @@ class SentryService:
             self.face_detection_enabled = True and FACE_PRIORITY
 
         # DeepSORT
-        self.tracker = DeepSort(max_age=30, n_init=3)
+        # Use faster embedding model and reduced parameters for Jetson
+        self.tracker = DeepSort(
+            max_age=30, 
+            n_init=3,
+            embedder="mobilenet",  # Faster than default
+            half=True,  # Use FP16 for speed
+            bgr=True,  # Our frames are BGR
+            embedder_gpu=True  # Use GPU for embeddings
+        )
 
         # Servo
         self.servo = ServoController()
@@ -222,6 +238,23 @@ class SentryService:
         self.fps_start_time = time.time()
         self.fps_frame_count = 0
         self.current_fps = 0
+
+        # Performance optimization
+        self.frame_counter = 0
+        self.last_detections = []  # Cache last YOLO detections
+        self.last_tracks = []  # Cache last tracking results
+        self.last_face_center = None  # Cache last face detection
+        self.face_frame_counter = 0
+        
+        # Performance profiling
+        self.profiling_enabled = True
+        self.profile_times = {
+            'yolo': [],
+            'tracking': [],
+            'face': [],
+            'drawing': [],
+            'total': []
+        }
 
         # Stats for API
         self.stats = {
@@ -350,6 +383,8 @@ class SentryService:
         print("[SENTRY] Processing loop started")
 
         while self.running:
+            loop_start = time.time()
+            
             # Process external commands
             self._process_commands()
 
@@ -359,16 +394,27 @@ class SentryService:
                 time.sleep(0.1)
                 continue
 
-            # Detect people
-            detections = self._detect_people(frame)
+            self.frame_counter += 1
 
-            # Update tracker
-            tracks = self._update_tracks(frame, detections)
+            # Run YOLO detection only every N frames
+            yolo_start = time.time()
+            if self.frame_counter % DETECTION_SKIP_FRAMES == 0:
+                self.last_detections = self._detect_people(frame)
+            yolo_time = time.time() - yolo_start
+
+            # Update tracker with cached detections - MAJOR BOTTLENECK
+            # DeepSORT embedding extraction is expensive, skip frames
+            track_start = time.time()
+            if self.frame_counter % TRACKING_UPDATE_SKIP == 0:
+                self.last_tracks = self._update_tracks(frame, self.last_detections)
+            tracks = self.last_tracks
+            track_time = time.time() - track_start
 
             # Check timeout
             self.target.check_timeout()
 
             # Process tracking
+            face_start = time.time()
             target_found = False
             for track in tracks:
                 track_id = track['id']
@@ -383,9 +429,13 @@ class SentryService:
 
                     # Get target center - prioritize face if detected
                     if FACE_PRIORITY and self.face_detection_enabled:
-                        face_center = self.detect_faces(frame, bbox)
-                        if face_center:
-                            cx, cy = face_center
+                        self.face_frame_counter += 1
+                        # Run face detection every N frames to reduce load
+                        if self.face_frame_counter % FACE_DETECTION_SKIP_FRAMES == 0:
+                            self.last_face_center = self.detect_faces(frame, bbox)
+                        
+                        if self.last_face_center:
+                            cx, cy = self.last_face_center
                         else:
                             # No face detected, fall back to body center
                             cx, cy = self._get_bbox_center(bbox)
@@ -394,18 +444,35 @@ class SentryService:
                     
                     self._control_servos(cx, cy)
                     break
+            
+            face_time = time.time() - face_start
+            
+            # Clear cached face if target lost
+            if not target_found:
+                self.last_face_center = None
+                self.face_frame_counter = 0
 
             # Update FPS
             self._update_fps()
 
             # Draw UI
+            draw_start = time.time()
             annotated_frame = self._draw_ui(frame, tracks)
+            draw_time = time.time() - draw_start
 
             # Store latest frame (thread-safe)
             with self.frame_lock:
                 self.latest_frame = annotated_frame
 
             # Update stats
+            loop_time = time.time() - loop_start
+            
+            # Profile logging every 30 frames
+            if self.profiling_enabled and self.frame_counter % 30 == 0:
+                print(f"[PROFILE] YOLO: {yolo_time*1000:.1f}ms | Track: {track_time*1000:.1f}ms | "
+                      f"Face: {face_time*1000:.1f}ms | Draw: {draw_time*1000:.1f}ms | "
+                      f"Total: {loop_time*1000:.1f}ms | FPS: {self.current_fps:.1f}")
+            
             self.stats = {
                 'fps': self.current_fps,
                 'tracking_status': self.target.get_status(),
@@ -418,7 +485,7 @@ class SentryService:
 
     def _detect_people(self, frame):
         """Detect people using YOLO."""
-        results = self.yolo_model(frame, verbose=False, conf=0.35, classes=[0], imgsz=320)
+        results = self.yolo_model(frame, verbose=False, conf=0.35, classes=[0], imgsz=YOLO_IMGSZ)
         detections = []
 
         for result in results:
@@ -493,16 +560,14 @@ class SentryService:
                 thickness = 3
                 label = f"TARGET ID:{track_id}"
                 
-                # Detect and draw face if this is the locked target
-                if FACE_PRIORITY and self.face_detection_enabled:
-                    face_center = self.detect_faces(frame, bbox)
-                    if face_center:
-                        fx, fy = face_center
-                        # Draw circle around face center
-                        cv2.circle(frame, (fx, fy), 8, (0, 255, 255), -1)  # Yellow dot
-                        cv2.circle(frame, (fx, fy), 20, (0, 255, 255), 2)  # Yellow circle
-                        # Draw line from face to frame center
-                        cv2.line(frame, (fx, fy), (self.frame_center_x, self.frame_center_y), (0, 255, 255), 1)
+                # Draw cached face if available
+                if FACE_PRIORITY and self.face_detection_enabled and self.last_face_center:
+                    fx, fy = self.last_face_center
+                    # Draw circle around face center
+                    cv2.circle(frame, (fx, fy), 8, (0, 255, 255), -1)  # Yellow dot
+                    cv2.circle(frame, (fx, fy), 20, (0, 255, 255), 2)  # Yellow circle
+                    # Draw line from face to frame center
+                    cv2.line(frame, (fx, fy), (self.frame_center_x, self.frame_center_y), (0, 255, 255), 1)
             else:
                 color = (255, 100, 0)  # Blue
                 thickness = 2

@@ -187,15 +187,15 @@ def generate_frames():
             frame = sentry.get_latest_frame()
 
             if frame is not None:
-                # Encode frame as JPEG
-                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                # Encode frame as JPEG with reduced quality for performance
+                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
                 if ret:
                     frame_bytes = buffer.tobytes()
                     yield (b'--frame\r\n'
                            b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
             import time
-            time.sleep(0.033)  # ~30 FPS
+            time.sleep(0.01)  # Minimal sleep, let sentry control frame rate
 
 
 @app.get("/video_feed")
