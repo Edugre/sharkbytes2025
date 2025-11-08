@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Person-Tracking Sentry - Complete Guide
 
 ## 📋 Table of Contents
@@ -407,3 +408,7 @@ AI Assistant - November 8, 2025
 
 **For detailed technical architecture, see ARCHITECTURE.md**
 
+=======
+# sharkbytes2025
+a
+>>>>>>> 6f1256ca208da0238606f21a43c65b69f5b18379

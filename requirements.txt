@@ -1,0 +1,28 @@
+# Python dependencies for Jetson Person-Tracking Sentry
+# Compatible with JetPack 6.x and Python 3.10
+
+# Base packages
+numpy<2
+
+# PyTorch with CUDA (JetPack 6.x specific wheels)
+# PyTorch 2.5.0 with CUDA 12.6
+torch @ https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
+
+# TorchVision 0.20.0 (ARM64)
+torchvision @ https://github.com/ultralytics/assets/releases/download/v0.0.0/torchvision-0.20.0a0+afc54f7-cp310-cp310-linux_aarch64.whl
+
+# Computer Vision
+opencv-python
+
+# YOLO Object Detection (includes YOLOv11)
+ultralytics
+
+# Tracking
+deep-sort-realtime
+
+# Servo Control
+adafruit-circuitpython-servokit
+adafruit-circuitpython-pca9685
+
+# Jetson GPIO
+Jetson.GPIO
