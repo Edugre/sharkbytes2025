@@ -1,0 +1,20 @@
+[
+  {
+    "image": "test1.jpg",
+    "timestamp": "2025-11-08T02:05:31.147028",
+    "analysis": "Here's an analysis of the security camera image:\n\n1.  **Brief Description:** The image shows a woman using an ATM on a sidewalk. Two individuals are standing nearby on the sidewalk, appearing to observe her. There are vehicles parked on the street in the background. The image is in black and white and has a timestamp.\n\n2.  **Number of People Detected:** 3\n\n3.  **Suspicious Activities or Items:**\n    *   The two individuals standing near the woman are wearing hoodies, which can be used to conceal their identities.\n    *   They appear to be loitering and observing the woman using the ATM, which could be construed as suspicious behavior.\n    *   The time of day, 6:26 AM, could be considered an unusual time for ATM usage, depending on the location.\n\n4.  **Overall Security Assessment:** **Alert**. The presence of the two individuals loitering and observing the woman at the ATM raises suspicion and warrants further investigation. Their attire and proximity to the woman create a potentially unsafe environment.",
+    "status": "success"
+  },
+  {
+    "image": "test2.jpg",
+    "timestamp": "2025-11-08T02:05:33.286061",
+    "analysis": "Okay, here's an analysis of the security camera image:\n\n1.  **Brief Description:** The image shows a man walking down a hallway. He is carrying a rectangular, dark object. The hallway has doors on either side and a radiator on the left. The image appears to be from a security camera, with timestamp information and camera identification (CAM4) visible.\n\n2.  **Number of People Detected:** One person.\n\n3.  **Any Suspicious Activities or Items:** It's difficult to determine with certainty if the activity is suspicious. The man is carrying a black case, it is hard to know what is inside.\n\n4.  **Overall Security Assessment:** **Warning.** While not immediately alarming, the lack of clarity about what is inside of the case warrants closer inspection. Further investigation should determine the man's identity and purpose for being in the hallway.\n",
+    "status": "success"
+  },
+  {
+    "image": "test3.jpg",
+    "timestamp": "2025-11-08T02:05:38.641275",
+    "analysis": "Okay, here's the analysis of the security camera image:\n\n1.  **Brief Description:** The image shows three individuals near what is labeled as the \"Exterior Back Door\" of a building. They are dressed in clothing that obscures their features. One individual appears to be covering the glass on the door with something, potentially a sheet or cloth.\n\n2.  **Number of People Detected:** Three\n\n3.  **Any Suspicious Activities or Items:**\n    *   The individuals are dressed in a manner that could be intended to conceal their identities (hoods, potentially masks).\n    *   One individual is covering the door's glass, which is a common tactic used to prevent visibility inside the building during a break-in.\n    *   The time stamp indicates the incident is occurring at 5:50 PM, which, while not necessarily suspicious on its own, could be relevant depending on the usual activity in the area.\n    *   One person appears to be holding something in their hand, possibly a tool or weapon. It's hard to determine.\n\n4.  **Overall Security Assessment:** **Alert**\n\n**Reasoning:**\n\nThe combination of obscured faces, covering the door glass, and the presence of multiple individuals suggests a high probability of criminal activity. The situation warrants immediate attention and should be reported to the appropriate authorities.\n",
+    "status": "success"
+  }
+]
