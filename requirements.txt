@@ -26,3 +26,11 @@ adafruit-circuitpython-pca9685
 
 # Jetson GPIO
 Jetson.GPIO
+
+# Gemini dependencies
+google-generativeai
+pillow
+python-dotenv
+
+# Supabase module
+supabase
