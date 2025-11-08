@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
@@ -9,14 +10,25 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 import tempfile
 import sys
+import cv2
+import numpy as np
+
 sys.path.append(os.path.dirname(__file__))  # ensures local imports work
 
 # ✅ Import alert function
 from alerts import send_discord_alert
 
-# Add gemini module to path
+# Add gemini and sentry modules to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from gemini.gemini_description import analyze_security_image
+
+# Import sentry service
+try:
+    from sentry.sentry_service import SentryService
+    SENTRY_AVAILABLE = True
+except Exception as e:
+    print(f"[WARN] Sentry service not available: {e}")
+    SENTRY_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -40,6 +52,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global sentry instance
+sentry: Optional[SentryService] = None
+
+
+# Startup event - initialize sentry
+@app.on_event("startup")
+async def startup_event():
+    """Initialize the sentry service on startup."""
+    global sentry
+    if SENTRY_AVAILABLE:
+        try:
+            print("[STARTUP] Initializing sentry service...")
+            sentry = SentryService()
+            sentry.start()
+            print("[STARTUP] Sentry service started successfully")
+        except Exception as e:
+            print(f"[ERROR] Failed to start sentry: {e}")
+            sentry = None
+    else:
+        print("[STARTUP] Sentry not available - video streaming disabled")
+
+
+# Shutdown event - cleanup sentry
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop the sentry service on shutdown."""
+    global sentry
+    if sentry:
+        print("[SHUTDOWN] Stopping sentry service...")
+        sentry.stop()
+        print("[SHUTDOWN] Sentry stopped")
 
 
 # Event model
@@ -96,17 +140,86 @@ def camera_control(command: ControlCommand):
     - pan_left, pan_right: Pan camera left or right
     - tilt_up, tilt_down: Tilt camera up or down
     """
+    global sentry
+
+    if not sentry:
+        return {"status": "error", "message": "Sentry not available"}
+
     print(f"[CONTROL] Received command: {command.command}")
+    sentry.send_command(command.command)
+
     return {"status": "success", "command": command.command}
+
+
+def generate_frames():
+    """
+    Generator function that yields MJPEG frames from the sentry.
+    """
+    global sentry
+
+    if not sentry:
+        # Return a placeholder frame if sentry not available
+        placeholder = cv2.imread("web/static/placeholder.jpg")
+        if placeholder is None:
+            # Create a simple placeholder
+            placeholder = cv2.putText(
+                cv2.rectangle(cv2.zeros((320, 320, 3), dtype=np.uint8), (0, 0), (320, 320), (50, 50, 50), -1),
+                "Camera Not Available",
+                (50, 160),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (200, 200, 200),
+                2
+            )
+
+        ret, buffer = cv2.imencode('.jpg', placeholder)
+        frame_bytes = buffer.tobytes()
+
+        while True:
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            import time
+            time.sleep(0.1)
+    else:
+        # Stream frames from sentry
+        while True:
+            frame = sentry.get_latest_frame()
+
+            if frame is not None:
+                # Encode frame as JPEG
+                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                if ret:
+                    frame_bytes = buffer.tobytes()
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
+            import time
+            time.sleep(0.033)  # ~30 FPS
 
 
 @app.get("/video_feed")
 def video_feed():
     """
-    Stream video feed from the camera.
-    Placeholder for MJPEG streaming.
+    Stream video feed from the camera using MJPEG.
+    This works directly with HTML <img> tags.
     """
-    return {"status": "not_implemented", "message": "Video streaming endpoint - to be implemented"}
+    return StreamingResponse(
+        generate_frames(),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
+
+
+@app.get("/sentry/stats")
+def get_sentry_stats():
+    """
+    Get current sentry statistics (FPS, tracking status, servo angles, etc.)
+    """
+    global sentry
+
+    if not sentry:
+        return {"status": "unavailable"}
+
+    return sentry.get_stats()
 
 
 @app.get("/events", response_model=List[Event])
