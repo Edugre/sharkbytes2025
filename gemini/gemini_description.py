@@ -91,10 +91,10 @@ def process_test_images():
         img_path = test_folder / img_name
         
         if not img_path.exists():
-            print(f" {img_name} not found, skipping...")
+            print(f"⚠️  {img_name} not found, skipping...")
             continue
         
-        print(f"Analyzing {img_name}...")
+        print(f"📸 Analyzing {img_name}...")
         print("-" * 60)
         
         result = analyze_security_image(img_path)
@@ -103,7 +103,7 @@ def process_test_images():
         if result["status"] == "success":
             print(result["analysis"])
         else:
-            print(f"Error: {result['error']}")
+            print(f"❌ Error: {result['error']}")
         
         print()
         print("-" * 60)
