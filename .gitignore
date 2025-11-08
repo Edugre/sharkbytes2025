@@ -1,0 +1,71 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables / secrets
+.env
+.env.*
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+*.swp
+.DS_Store
+
+# Compiled models / weights
+*.pt
+*.onnx
+*.engine
+*.tflite
+
+# Data and event recordings
+/data/
+datasets/
+outputs/
+captures/
+videos/
+events/
+*.mp4
+*.jpg
+*.jpeg
+*.png
+
+# IDE and system junk
+.vscode/
+.idea/
+*.code-workspace
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+
+# Node or frontend (if applicable)
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Docker / containers
+*.pid
+*.sock
+*.tar
+*.log
+
+# Backup / OS-specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
