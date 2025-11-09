@@ -694,7 +694,7 @@ class SentryService:
             x1, y1, x2, y2 = map(int, bbox)
 
             if self.target.is_locked and track_id == self.target.locked_id:
-                color = (0, 255, 0)  # Green
+                color = (249, 221, 53)  # Cyan #35DDF9 (BGR format)
                 thickness = 3
                 label = f"TARGET ID:{track_id}"
                 
@@ -702,47 +702,25 @@ class SentryService:
                 if FACE_PRIORITY and self.face_detection_enabled and self.last_face_center:
                     fx, fy = self.last_face_center
                     # Draw circle around face center
-                    cv2.circle(frame, (fx, fy), 8, (0, 255, 255), -1)  # Yellow dot
-                    cv2.circle(frame, (fx, fy), 20, (0, 255, 255), 2)  # Yellow circle
+                    cv2.circle(frame, (fx, fy), 8, (249, 221, 53), -1)  # Cyan dot
+                    cv2.circle(frame, (fx, fy), 20, (249, 221, 53), 2)  # Cyan circle
                     # Draw line from face to frame center
-                    cv2.line(frame, (fx, fy), (self.frame_center_x, self.frame_center_y), (0, 255, 255), 1)
+                    cv2.line(frame, (fx, fy), (self.frame_center_x, self.frame_center_y), (249, 221, 53), 1)
             else:
-                color = (255, 100, 0)  # Blue
+                color = (255, 180, 100)  # Light blue (BGR format)
                 thickness = 2
                 label = f"ID:{track_id}"
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
             cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-        # Draw crosshair
+        # Draw crosshair - cyan theme
         cv2.line(frame, (self.frame_center_x - 20, self.frame_center_y),
-                (self.frame_center_x + 20, self.frame_center_y), (0, 0, 255), 2)
+                (self.frame_center_x + 20, self.frame_center_y), (255, 139, 61), 2)  # Blue #3D8BFF
         cv2.line(frame, (self.frame_center_x, self.frame_center_y - 20),
-                (self.frame_center_x, self.frame_center_y + 20), (0, 0, 255), 2)
+                (self.frame_center_x, self.frame_center_y + 20), (255, 139, 61), 2)  # Blue #3D8BFF
 
-        # Draw status
-        if not self.auto_tracking_enabled:
-            status_text = "MANUAL MODE"
-        elif self.manual_control_active:
-            status_text = "MANUAL CONTROL"
-        elif self.is_scanning:
-            status_text = "AUTO: SCANNING..."
-        elif not self.target.is_locked and self.scan_center_time is not None:
-            status_text = "AUTO: CENTERING..."
-        else:
-            status_text = self.target.get_status()
-        cv2.putText(frame, f"Status: {status_text}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-
-        # Draw servo angles
-        servo_text = f"Pan: {self.servo.pan_angle:.1f}  Tilt: {self.servo.tilt_angle:.1f}"
-        cv2.putText(frame, servo_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-
-        # Draw FPS
-        cv2.putText(frame, f"FPS: {self.current_fps:.1f}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-
-        # Draw people count
-        cv2.putText(frame, f"Tracks: {len(tracks)}", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-
+        # Note: Status, FPS, and Tracks text moved to frontend overlay for better readability
         return frame
 
     def _take_snapshot(self, frame, track_id, bbox, is_new=False):

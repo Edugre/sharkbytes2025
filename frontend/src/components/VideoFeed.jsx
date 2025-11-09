@@ -7,6 +7,7 @@ function VideoFeed() {
     sentry_running: false,
     sentry_available: false,
   })
+  const [stats, setStats] = useState(null)
   const [actionLoading, setActionLoading] = useState(false)
 
   // Placeholder for video stream URL - you'll configure this to point to your OpenCV stream
@@ -36,6 +37,7 @@ function VideoFeed() {
         sentry_running: data.sentry_running,
         sentry_available: data.sentry_available,
       })
+      setStats(data.stats)
     } catch (error) {
       console.error('Failed to fetch system status:', error)
     }
@@ -59,15 +61,15 @@ function VideoFeed() {
   }
 
   return (
-    <div className="w-full h-full flex flex-col">
+    <div className="w-full h-full flex flex-col text-slate-100">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-slate-700">Live Camera Feed</h2>
+        <h2 className="text-xl font-semibold neon-text">Live Camera Feed</h2>
         
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'} animate-pulse`}></div>
-            <span className="text-sm text-slate-500">
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-cyan-400' : 'bg-red-400'} animate-pulse`}></div>
+            <span className="text-sm text-slate-300">
               {isConnected ? 'Connected' : 'Disconnected'}
             </span>
           </div>
@@ -76,12 +78,12 @@ function VideoFeed() {
           <button
             onClick={handleToggle}
             disabled={actionLoading || !systemStatus.sentry_available}
-            className={`p-2 rounded-lg transition-all ${
+            className={`p-2 rounded-lg transition-all focus-neon shadow-glow ${
               !systemStatus.sentry_available
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                 : systemStatus.sentry_running
-                  ? 'bg-red-500 text-white hover:bg-red-600 active:scale-95'
-                  : 'bg-green-500 text-white hover:bg-green-600 active:scale-95'
+                  ? 'bg-red-600 text-white hover:bg-red-500 active:scale-95'
+                  : 'bg-[var(--accent)] text-slate-900 hover:brightness-110 active:scale-95'
             }`}
             title={systemStatus.sentry_running ? 'Stop Sentry' : 'Start Sentry'}
           >
@@ -106,12 +108,12 @@ function VideoFeed() {
       </div>
 
       {/* Video Container */}
-      <div className="flex-grow bg-slate-900 rounded-2xl overflow-hidden relative">
+      <div className="flex-grow rounded-2xl overflow-hidden relative border border-cyan-500/20 bg-black/40">
         {error ? (
           <div className="w-full h-full flex items-center justify-center">
             <div className="text-center">
               <p className="text-red-400 mb-2">Connection Error</p>
-              <p className="text-slate-400 text-sm">{error}</p>
+              <p className="text-slate-300 text-sm">{error}</p>
             </div>
           </div>
         ) : (
@@ -124,9 +126,35 @@ function VideoFeed() {
           />
         )}
 
-        {/* Overlay info - optional */}
-        <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-lg">
-          <p className="text-white text-xs font-mono">OpenCV Stream</p>
+        {/* Overlay info */}
+        <div className="absolute top-4 left-4 flex gap-3">
+          {/* LIVE Indicator */}
+          <div className="bg-black/70 px-3 py-1.5 rounded-md border border-cyan-500/40">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></div>
+              <p className="text-cyan-100 text-xs font-semibold tracking-wider">LIVE</p>
+            </div>
+          </div>
+
+          {/* Stats */}
+          {systemStatus.sentry_running && stats && (
+            <div className="bg-black/70 px-3 py-1.5 rounded-md border border-cyan-500/40">
+              <div className="flex items-center gap-4 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-cyan-400 font-semibold">STATUS</span>
+                  <span className="text-slate-200">{stats.tracking_status}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-cyan-400 font-semibold">FPS</span>
+                  <span className="text-slate-200">{Math.round(stats.fps)}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-cyan-400 font-semibold">TRACKS</span>
+                  <span className="text-slate-200">{stats.people_count}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

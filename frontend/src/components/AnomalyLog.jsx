@@ -73,10 +73,10 @@ function AnomalyLog() {
   }
 
   return (
-    <div className="w-full h-full flex flex-col">
+  <div className="w-full h-full flex flex-col text-slate-100">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-slate-700">Anomaly Log</h2>
+  <h2 className="text-xl font-semibold neon-text">Anomaly Log</h2>
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
           <span className="text-xs text-slate-500">Live</span>
@@ -84,16 +84,16 @@ function AnomalyLog() {
       </div>
 
       {/* Anomaly List */}
-      <div className="flex-grow overflow-y-auto space-y-3 pr-2">
+  <div className="flex-grow overflow-y-auto space-y-3 pr-2">
         {loading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-slate-400 text-sm">Loading anomalies...</div>
+            <div className="text-slate-300 text-sm">Loading anomalies...</div>
           </div>
         ) : anomalies.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <p className="text-slate-400 text-sm mb-2">No anomalies detected</p>
-              <p className="text-slate-300 text-xs">System monitoring active</p>
+              <p className="text-slate-300 text-sm mb-2">No anomalies detected</p>
+              <p className="text-slate-400 text-xs">System monitoring active</p>
             </div>
           </div>
         ) : (
@@ -101,11 +101,11 @@ function AnomalyLog() {
             <div
               key={anomaly.id}
               onClick={() => setSelectedAnomaly(anomaly)}
-              className="bg-slate-50 rounded-xl p-4 border border-slate-200 hover:shadow-md transition-shadow duration-200 cursor-pointer"
+              className="bg-black/40 rounded-xl p-4 border border-cyan-500/10 hover:border-cyan-400/30 hover:shadow-glow transition-all duration-200 cursor-pointer"
             >
               {/* Timestamp and Severity */}
               <div className="flex items-start justify-between mb-2">
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-slate-300">
                   <span className="font-semibold">{formatDate(anomaly.timestamp)}</span>
                   <span className="mx-1">•</span>
                   <span>{formatTimestamp(anomaly.timestamp)}</span>
@@ -120,13 +120,13 @@ function AnomalyLog() {
               </div>
 
               {/* Description */}
-              <p className="text-sm text-slate-700 leading-relaxed mb-3">
+              <p className="text-sm text-slate-200 leading-relaxed mb-3">
                 {anomaly.description}
               </p>
 
               {/* Image Preview (if available) */}
               {anomaly.imageUrl && (
-                <div className="rounded-lg overflow-hidden bg-slate-900">
+                <div className="rounded-lg overflow-hidden bg-black/60 border border-cyan-500/10">
                   <img
                     src={anomaly.imageUrl}
                     alt="Anomaly capture"
@@ -140,8 +140,8 @@ function AnomalyLog() {
       </div>
 
       {/* Footer Stats */}
-      <div className="mt-4 pt-4 border-t border-slate-200">
-        <div className="flex items-center justify-between text-xs text-slate-500">
+      <div className="mt-4 pt-4 border-t border-cyan-500/10">
+        <div className="flex items-center justify-between text-xs text-slate-300">
           <span>Total Events: {anomalies.length}</span>
           <span>Last 24h</span>
         </div>
@@ -154,14 +154,14 @@ function AnomalyLog() {
           onClick={() => setSelectedAnomaly(null)}
         >
           <div
-            className="bg-white rounded-2xl max-w-4xl max-h-[90vh] overflow-auto shadow-2xl"
+            className="bg-black/70 border border-cyan-500/20 rounded-2xl max-w-4xl max-h-[90vh] overflow-auto shadow-glow"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-start justify-between">
+            <div className="sticky top-0 bg-black/60 border-b border-cyan-500/10 p-6 flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <h3 className="text-2xl font-semibold text-slate-800">Event Details</h3>
+                  <h3 className="text-2xl font-semibold neon-text">Event Details</h3>
                   <span
                     className={`px-3 py-1 rounded-lg text-sm font-medium border ${getSeverityColor(
                       selectedAnomaly.severity
@@ -170,7 +170,7 @@ function AnomalyLog() {
                     {selectedAnomaly.severity.toUpperCase()}
                   </span>
                 </div>
-                <div className="text-sm text-slate-500">
+                <div className="text-sm text-slate-300">
                   <span className="font-semibold">{formatDate(selectedAnomaly.timestamp)}</span>
                   <span className="mx-2">•</span>
                   <span>{formatTimestamp(selectedAnomaly.timestamp)}</span>
@@ -178,7 +178,7 @@ function AnomalyLog() {
               </div>
               <button
                 onClick={() => setSelectedAnomaly(null)}
-                className="text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-slate-100 rounded-lg"
+                className="text-slate-300 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
               >
                 <svg
                   className="w-6 h-6"
@@ -200,8 +200,8 @@ function AnomalyLog() {
             <div className="p-6">
               {/* Description */}
               <div className="mb-6">
-                <h4 className="text-sm font-semibold text-slate-700 mb-2">Description</h4>
-                <p className="text-slate-700 leading-relaxed">
+                <h4 className="text-sm font-semibold text-slate-200 mb-2">Description</h4>
+                <p className="text-slate-200 leading-relaxed">
                   {selectedAnomaly.description}
                 </p>
               </div>
@@ -209,8 +209,8 @@ function AnomalyLog() {
               {/* Full Image */}
               {selectedAnomaly.imageUrl && (
                 <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2">Captured Image</h4>
-                  <div className="rounded-xl overflow-hidden bg-slate-900 border border-slate-200">
+                  <h4 className="text-sm font-semibold text-slate-200 mb-2">Captured Image</h4>
+                  <div className="rounded-xl overflow-hidden bg-black/60 border border-cyan-500/10">
                     <img
                       src={selectedAnomaly.imageUrl}
                       alt="Anomaly capture full size"

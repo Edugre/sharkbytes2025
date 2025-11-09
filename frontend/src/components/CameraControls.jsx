@@ -54,66 +54,54 @@ function CameraControls() {
   }
 
   return (
-    <div className="w-full h-full flex flex-col justify-center">
-      <h3 className="text-sm font-semibold text-slate-600 mb-4">Camera Controls</h3>
-
-      {/* All Controls in One Row */}
-      <div className="flex items-center gap-3">
-        {/* Pan Left */}
+    <div className="w-full h-full flex items-center justify-between text-slate-100">
+      <h3 className="text-sm font-semibold neon-text tracking-wide">Camera Controls</h3>
+      
+      {/* Inline Control Buttons */}
+      <div className="flex items-center gap-2">
         <button
           onClick={() => handlePan('left')}
-          className="w-14 h-14 rounded-xl bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 transition-colors duration-150 flex items-center justify-center font-bold text-xl shadow-md"
+          className="w-10 h-10 rounded-md bg-black/60 border border-cyan-500/30 text-cyan-200 hover:text-cyan-100 hover:border-cyan-400 hover:bg-cyan-500/10 active:scale-95 flex items-center justify-center font-bold text-lg transition-all"
         >
           ←
         </button>
-
-        {/* Tilt Up */}
         <button
           onClick={() => handleTilt('up')}
-          className="w-14 h-14 rounded-xl bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 transition-colors duration-150 flex items-center justify-center font-bold text-xl shadow-md"
+          className="w-10 h-10 rounded-md bg-black/60 border border-cyan-500/30 text-cyan-200 hover:text-cyan-100 hover:border-cyan-400 hover:bg-cyan-500/10 active:scale-95 flex items-center justify-center font-bold text-lg transition-all"
         >
           ↑
         </button>
-
-        {/* Tilt Down */}
+        <button
+          onClick={handleCenter}
+          className="px-3 h-10 rounded-md bg-gradient-to-br from-cyan-500 to-blue-600 text-slate-900 font-semibold text-xs hover:brightness-110 active:scale-95 flex items-center justify-center transition-all"
+        >
+          center
+        </button>
         <button
           onClick={() => handleTilt('down')}
-          className="w-14 h-14 rounded-xl bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 transition-colors duration-150 flex items-center justify-center font-bold text-xl shadow-md"
+          className="w-10 h-10 rounded-md bg-black/60 border border-cyan-500/30 text-cyan-200 hover:text-cyan-100 hover:border-cyan-400 hover:bg-cyan-500/10 active:scale-95 flex items-center justify-center font-bold text-lg transition-all"
         >
           ↓
         </button>
-
-        {/* Pan Right */}
         <button
           onClick={() => handlePan('right')}
-          className="w-14 h-14 rounded-xl bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 transition-colors duration-150 flex items-center justify-center font-bold text-xl shadow-md"
+          className="w-10 h-10 rounded-md bg-black/60 border border-cyan-500/30 text-cyan-200 hover:text-cyan-100 hover:border-cyan-400 hover:bg-cyan-500/10 active:scale-95 flex items-center justify-center font-bold text-lg transition-all"
         >
           →
         </button>
-
-        {/* Center Button */}
-        <button
-          onClick={handleCenter}
-          className="w-14 h-14 rounded-xl bg-slate-600 text-white hover:bg-slate-700 active:bg-slate-800 transition-colors duration-150 flex items-center justify-center font-bold text-2xl shadow-md"
-        >
-          ⊙
-        </button>
-
-        {/* Divider */}
-        <div className="h-12 w-px bg-slate-300 mx-2"></div>
-
-        {/* Manual/Auto Toggle */}
-        <button
-          onClick={handleToggleLock}
-          className={`px-6 h-14 rounded-xl font-semibold text-sm shadow-lg transition-all duration-200 ${
-            isLocked
-              ? 'bg-green-500 text-white hover:bg-green-600 active:bg-green-700'
-              : 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700'
-          }`}
-        >
-          {isLocked ? '🤖 Auto Tracking' : '🎮 Manual'}
-        </button>
       </div>
+
+      {/* Manual/Auto Toggle */}
+      <button
+        onClick={handleToggleLock}
+        className={`px-3 py-1.5 rounded-md font-semibold text-xs tracking-wide transition-all ${
+          isLocked
+            ? 'bg-cyan-500 text-slate-900 hover:brightness-110'
+            : 'bg-slate-800 border border-cyan-500/30 text-cyan-200 hover:border-cyan-400'
+        }`}
+      >
+        {isLocked ? 'AUTO' : 'MANUAL'}
+      </button>
     </div>
   )
 }
