@@ -39,3 +39,6 @@ supabase
 fastapi
 uvicorn[standard]
 python-multipart  # For file uploads
+# Gemini AI for image analysis
+google-generativeai
+pillow

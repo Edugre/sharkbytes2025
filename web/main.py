@@ -148,6 +148,21 @@ def camera_control(command: ControlCommand):
     print(f"[CONTROL] Received command: {command.command}")
     sentry.send_command(command.command)
 
+    return {"status": "ok", "command": command.command}
+
+
+@app.get("/snapshots/stats")
+def get_snapshot_stats():
+    """
+    Get statistics about snapshots and Gemini analysis.
+    """
+    global sentry
+    
+    if not sentry:
+        return {"status": "error", "message": "Sentry not available"}
+    
+    return sentry.get_snapshot_stats()
+
     return {"status": "success", "command": command.command}
 
 

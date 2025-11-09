@@ -23,6 +23,8 @@ sentry_env/
 *.bak
 *.swp
 .DS_Store
+logs/
+snapshots/
 
 # Compiled models / weights
 *.pt

@@ -11,6 +11,9 @@ import threading
 from queue import Queue
 from typing import Optional, Dict, Any
 from ultralytics import YOLO
+from datetime import datetime
+from pathlib import Path
+import json
 
 # Import configurations from original sentry
 import sys
@@ -73,6 +76,11 @@ FACE_SCALE_FACTOR = 1.2  # Increased for faster detection (was 1.1)
 FACE_MIN_NEIGHBORS = 4  # Reduced for faster detection (was 5)
 FACE_MIN_SIZE = (40, 40)  # Increased minimum size for faster detection
 FACE_DETECTION_SKIP_FRAMES = 5  # Run face detection every N frames when target locked
+
+# Snapshot parameters
+SNAPSHOT_INTERVAL = 15  # Seconds between snapshots for same person
+SNAPSHOT_DIR = "snapshots"  # Directory to save snapshots
+ENABLE_GEMINI_ANALYSIS = True  # Enable Gemini AI analysis of snapshots
 
 
 # ========================================
@@ -244,6 +252,13 @@ class SentryService:
         self.last_face_center = None  # Cache last face detection
         self.face_frame_counter = 0
         
+        # Snapshot tracking (initialize BEFORE starting threads)
+        self.snapshot_dir = Path(SNAPSHOT_DIR)
+        self.snapshot_dir.mkdir(exist_ok=True)
+        self.track_snapshots = {}  # {track_id: last_snapshot_time}
+        self.seen_track_ids = set()  # Set of all track IDs seen
+        self.snapshot_queue = Queue()  # Queue for Gemini analysis
+        
         # Performance profiling
         self.profiling_enabled = True
         self.profile_times = {
@@ -277,6 +292,12 @@ class SentryService:
         }
 
         print("[SENTRY] Service initialized")
+        
+        # Start Gemini analysis worker thread if enabled
+        if ENABLE_GEMINI_ANALYSIS:
+            self.gemini_worker = threading.Thread(target=self._gemini_analysis_worker, daemon=True)
+            self.gemini_worker.start()
+            print("[GEMINI] Analysis worker started")
 
     def start(self):
         """Start the background thread."""
@@ -301,6 +322,16 @@ class SentryService:
         """Get the latest annotated frame (thread-safe)."""
         with self.frame_lock:
             return self.latest_frame.copy() if self.latest_frame is not None else None
+    
+    def get_snapshot_stats(self) -> Dict[str, Any]:
+        """Get snapshot and analysis statistics."""
+        return {
+            'total_people_seen': len(self.seen_track_ids),
+            'active_snapshots': len(self.track_snapshots),
+            'pending_analyses': self.snapshot_queue.qsize(),
+            'snapshot_directory': str(self.snapshot_dir),
+            'gemini_enabled': ENABLE_GEMINI_ANALYSIS
+        }
 
     def detect_faces(self, frame, person_bbox):
         """
@@ -453,6 +484,16 @@ class SentryService:
                 for track in tracks:
                     track_id = track['id']
                     bbox = track['bbox']
+                    
+                    # Check if this is a new ID - take immediate snapshot
+                    is_new_id = track_id not in self.seen_track_ids
+                    if is_new_id:
+                        self.seen_track_ids.add(track_id)
+                        self._take_snapshot(frame, track_id, bbox, is_new=True)
+                        print(f"[SNAPSHOT] New person detected (ID: {track_id})")
+                    else:
+                        # Check if it's time for periodic snapshot
+                        self._check_periodic_snapshot(frame, track_id, bbox)
 
                     if not self.target.is_locked:
                         self.target.lock_target(track_id)
@@ -699,9 +740,226 @@ class SentryService:
 
         return frame
 
+    def _take_snapshot(self, frame, track_id, bbox, is_new=False):
+        """
+        Take a snapshot of the tracked person.
+        
+        Args:
+            frame: Current video frame
+            track_id: ID of the tracked person
+            bbox: Bounding box [x1, y1, x2, y2]
+            is_new: True if this is a new person (overrides timer)
+        """
+        current_time = time.time()
+        
+        # Check if we should take a snapshot
+        should_snapshot = False
+        
+        if is_new:
+            # New person - always take snapshot
+            should_snapshot = True
+            reason = "new_person"
+        elif track_id in self.track_snapshots:
+            # Existing person - check timer
+            time_since_last = current_time - self.track_snapshots[track_id]
+            if time_since_last >= SNAPSHOT_INTERVAL:
+                should_snapshot = True
+                reason = "periodic"
+        else:
+            # First time seeing this ID (shouldn't happen if is_new works)
+            should_snapshot = True
+            reason = "first_sighting"
+        
+        if should_snapshot:
+            # Update last snapshot time
+            self.track_snapshots[track_id] = current_time
+            
+            # Create filename with timestamp and track ID
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"person_{track_id}_{timestamp}_{reason}.jpg"
+            filepath = self.snapshot_dir / filename
+            
+            # Save the full frame (we'll crop in Gemini analysis if needed)
+            cv2.imwrite(str(filepath), frame)
+            
+            # Queue for Gemini analysis
+            if ENABLE_GEMINI_ANALYSIS:
+                self.snapshot_queue.put({
+                    'filepath': filepath,
+                    'track_id': track_id,
+                    'bbox': bbox,
+                    'timestamp': timestamp,
+                    'reason': reason
+                })
+            
+            print(f"[SNAPSHOT] Saved: {filename} (reason: {reason})")
+    
+    def _check_periodic_snapshot(self, frame, track_id, bbox):
+        """
+        Check if it's time for a periodic snapshot of an existing person.
+        
+        Args:
+            frame: Current video frame
+            track_id: ID of the tracked person
+            bbox: Bounding box [x1, y1, x2, y2]
+        """
+        if track_id in self.track_snapshots:
+            current_time = time.time()
+            time_since_last = current_time - self.track_snapshots[track_id]
+            
+            if time_since_last >= SNAPSHOT_INTERVAL:
+                self._take_snapshot(frame, track_id, bbox, is_new=False)
+    
+    def _gemini_analysis_worker(self):
+        """
+        Background worker that processes snapshots through Gemini API,
+        uploads to Supabase, and sends Discord alerts.
+        Runs in a separate thread to avoid blocking the main loop.
+        """
+        print("[GEMINI] Worker thread started")
+        
+        # Import required modules
+        try:
+            sys.path.insert(0, str(Path(__file__).parent.parent / 'gemini'))
+            from gemini_description import analyze_security_image
+            print("[GEMINI] Successfully imported analyzer")
+        except Exception as e:
+            print(f"[GEMINI] Failed to import analyzer: {e}")
+            print("[GEMINI] Snapshots will be saved but not analyzed")
+            return
+        
+        # Import Supabase and Discord alert function
+        try:
+            from dotenv import load_dotenv
+            from supabase import create_client, Client
+            sys.path.insert(0, str(Path(__file__).parent.parent / 'web'))
+            from alerts import send_discord_alert
+            
+            load_dotenv()
+            SUPABASE_URL = os.getenv("SUPABASE_URL")
+            SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+            
+            if SUPABASE_URL and SUPABASE_KEY:
+                supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+                supabase_enabled = True
+                print("[GEMINI] Supabase integration enabled")
+            else:
+                supabase_enabled = False
+                print("[GEMINI] Supabase not configured - logs only mode")
+        except Exception as e:
+            print(f"[GEMINI] Failed to initialize Supabase: {e}")
+            supabase_enabled = False
+        
+        # Create logs directory
+        logs_dir = Path("logs/gemini_analysis")
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        
+        while self.running:
+            try:
+                # Wait for a snapshot to analyze (with timeout to check self.running)
+                try:
+                    snapshot_data = self.snapshot_queue.get(timeout=1.0)
+                except:
+                    continue
+                
+                filepath = snapshot_data['filepath']
+                track_id = snapshot_data['track_id']
+                reason = snapshot_data['reason']
+                timestamp_str = snapshot_data['timestamp']
+                
+                print(f"[GEMINI] Analyzing snapshot for person {track_id}...")
+                
+                # Analyze with Gemini
+                result = analyze_security_image(str(filepath))
+                
+                # Add tracking metadata
+                result['track_id'] = track_id
+                result['reason'] = reason
+                result['snapshot_file'] = str(filepath)
+                
+                # Save analysis result locally
+                log_filename = logs_dir / f"analysis_{track_id}_{timestamp_str}.json"
+                with open(log_filename, 'w') as f:
+                    import json
+                    json.dump(result, f, indent=2)
+                
+                # Print summary
+                if result['status'] == 'success':
+                    severity_emoji = {
+                        'info': 'ℹ️',
+                        'warning': '⚠️',
+                        'critical': '🚨'
+                    }
+                    emoji = severity_emoji.get(result.get('severity', 'info'), 'ℹ️')
+                    print(f"[GEMINI] {emoji} Person {track_id}: {result['analysis']}")
+                    
+                    # Upload to Supabase if enabled
+                    if supabase_enabled:
+                        try:
+                            # Read image file
+                            with open(filepath, 'rb') as img_file:
+                                image_content = img_file.read()
+                            
+                            # Upload to Supabase Storage
+                            storage_filename = f"person_{track_id}_{timestamp_str}_{reason}.jpg"
+                            supabase.storage.from_("security-frames").upload(
+                                path=storage_filename,
+                                file=image_content,
+                                file_options={"content-type": "image/jpeg"}
+                            )
+                            
+                            # Get public URL
+                            image_url = supabase.storage.from_("security-frames").get_public_url(storage_filename)
+                            
+                            # Create event in database
+                            event_data = {
+                                "event_type": "person_detected",
+                                "description": f"Person {track_id}: {result['analysis']}",
+                                "severity": result.get('severity', 'info'),
+                                "timestamp": result['timestamp'],
+                                "image_url": image_url
+                            }
+                            
+                            db_response = supabase.table("events").insert(event_data).execute()
+                            
+                            if db_response.data:
+                                event_id = db_response.data[0].get('id')
+                                print(f"[SUPABASE] Event created (ID: {event_id})")
+                            
+                            # Send Discord alert for warning/critical
+                            if result.get('severity') in ['warning', 'critical']:
+                                send_discord_alert(
+                                    event_type="person_detected",
+                                    description=f"Person {track_id}: {result['analysis']}",
+                                    severity=result['severity'],
+                                    image_url=image_url
+                                )
+                                print(f"[DISCORD] Alert sent for person {track_id}")
+                                
+                        except Exception as e:
+                            print(f"[SUPABASE] Error uploading snapshot: {e}")
+                else:
+                    print(f"[GEMINI] ❌ Analysis failed: {result.get('error', 'Unknown error')}")
+                
+                # Mark task as done
+                self.snapshot_queue.task_done()
+                
+            except Exception as e:
+                print(f"[GEMINI] Error in analysis worker: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        print("[GEMINI] Worker thread stopped")
+
     def cleanup(self):
         """Clean up resources."""
         print("[SENTRY] Cleaning up...")
+        
+        # Wait for any remaining Gemini analyses to complete
+        if ENABLE_GEMINI_ANALYSIS and not self.snapshot_queue.empty():
+            print("[GEMINI] Waiting for pending analyses...")
+            self.snapshot_queue.join()
+        
         if self.cap:
             self.cap.release()
         self.servo.reset()
