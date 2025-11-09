@@ -374,6 +374,23 @@ def create_event(event: EventCreate):
         raise HTTPException(status_code=500, detail=f"Error creating event: {str(e)}")
 
 
+@app.delete("/events/{event_id}")
+def delete_event(event_id: int):
+    """
+    Delete a security event by ID.
+    """
+    try:
+        response = supabase.table("events").delete().eq("id", event_id).execute()
+
+        if response.data:
+            return {"status": "success", "message": f"Event {event_id} deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting event: {str(e)}")
+
+
 @app.post("/analyze-frame", response_model=FrameAnalysisResponse)
 async def analyze_frame(file: UploadFile = File(...)):
     """
