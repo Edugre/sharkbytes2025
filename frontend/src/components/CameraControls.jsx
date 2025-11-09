@@ -39,7 +39,8 @@ function CameraControls() {
       ? Math.max(10, panAngle - step)
       : Math.min(170, panAngle + step)
     setPanAngle(newAngle)
-    sendCommand(`pan_${direction}`)
+    // Swap left/right to fix inversion
+    sendCommand(direction === 'left' ? 'pan_right' : 'pan_left')
   }
 
   const handleTilt = (direction) => {
@@ -48,7 +49,8 @@ function CameraControls() {
       ? Math.max(20, tiltAngle - step)
       : Math.min(150, tiltAngle + step)
     setTiltAngle(newAngle)
-    sendCommand(`tilt_${direction}`)
+    // Swap up/down to fix inversion
+    sendCommand(direction === 'up' ? 'tilt_down' : 'tilt_up')
   }
 
   return (

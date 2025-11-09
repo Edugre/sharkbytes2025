@@ -11,7 +11,6 @@ import threading
 from queue import Queue
 from typing import Optional, Dict, Any
 from ultralytics import YOLO
-from deep_sort_realtime.deepsort_tracker import DeepSort
 
 # Import configurations from original sentry
 import sys
@@ -211,16 +210,9 @@ class SentryService:
             print("[FACE] Face detector loaded successfully")
             self.face_detection_enabled = True and FACE_PRIORITY
 
-        # DeepSORT
-        # Use faster embedding model and reduced parameters for Jetson
-        self.tracker = DeepSort(
-            max_age=30, 
-            n_init=3,
-            embedder="mobilenet",  # Faster than default
-            half=True,  # Use FP16 for speed
-            bgr=True,  # Our frames are BGR
-            embedder_gpu=True  # Use GPU for embeddings
-        )
+        # ByteTrack is built into YOLO - no separate tracker needed!
+        print("[TRACK] Using ByteTrack (built-in)")
+        self.use_bytetrack = True
 
         # Servo
         self.servo = ServoController()
@@ -248,8 +240,7 @@ class SentryService:
 
         # Performance optimization
         self.frame_counter = 0
-        self.last_detections = []  # Cache last YOLO detections
-        self.last_tracks = []  # Cache last tracking results
+        self.last_tracks = []  # Cache last tracking results (ByteTrack is built-in)
         self.last_face_center = None  # Cache last face detection
         self.face_frame_counter = 0
         
@@ -434,19 +425,15 @@ class SentryService:
 
             self.frame_counter += 1
 
-            # Run YOLO detection only every N frames
+            # Run YOLO detection with ByteTrack (tracking built-in)
             yolo_start = time.time()
             if self.frame_counter % DETECTION_SKIP_FRAMES == 0:
-                self.last_detections = self._detect_people(frame)
-            yolo_time = time.time() - yolo_start
-
-            # Update tracker with cached detections - MAJOR BOTTLENECK
-            # DeepSORT embedding extraction is expensive, skip frames
-            track_start = time.time()
-            if self.frame_counter % TRACKING_UPDATE_SKIP == 0:
-                self.last_tracks = self._update_tracks(frame, self.last_detections)
+                self.last_tracks = self._detect_and_track(frame)
             tracks = self.last_tracks
-            track_time = time.time() - track_start
+            yolo_time = time.time() - yolo_start
+            
+            # No separate tracking step - ByteTrack runs with YOLO
+            track_time = 0
 
             # Check timeout
             self.target.check_timeout()
@@ -537,37 +524,33 @@ class SentryService:
 
         print("[SENTRY] Processing loop stopped")
 
-    def _detect_people(self, frame):
-        """Detect people using YOLO."""
-        results = self.model(frame, verbose=False, conf=0.35, classes=[0], imgsz=YOLO_IMGSZ)
-        detections = []
-
-        for result in results:
-            for box in result.boxes:
-                if int(box.cls[0]) == PERSON_CLASS_ID:
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                    conf = float(box.conf[0])
-                    detections.append([x1, y1, x2, y2, conf])
-
-        return detections
-
-    def _update_tracks(self, frame, detections):
-        """Update DeepSORT tracker."""
-        deepsort_detections = []
-        for det in detections:
-            x1, y1, x2, y2, conf = det
-            w, h = x2 - x1, y2 - y1
-            deepsort_detections.append(([x1, y1, w, h], conf, 'person'))
-
-        tracks = self.tracker.update_tracks(deepsort_detections, frame=frame)
-
-        confirmed_tracks = []
-        for track in tracks:
-            if track.is_confirmed():
-                bbox = track.to_ltrb()
-                confirmed_tracks.append({'id': track.track_id, 'bbox': bbox})
-
-        return confirmed_tracks
+    def _detect_and_track(self, frame):
+        """Detect and track people using YOLO with ByteTrack."""
+        # Use YOLO's track() method which includes ByteTrack
+        results = self.model.track(
+            frame, 
+            persist=True,  # Persist tracks across frames
+            verbose=False, 
+            conf=0.35, 
+            classes=[0],  # Person class
+            imgsz=YOLO_IMGSZ,
+            tracker="bytetrack.yaml"  # Use ByteTrack
+        )
+        
+        tracks = []
+        if results and len(results) > 0:
+            result = results[0]
+            if result.boxes is not None and result.boxes.id is not None:
+                boxes = result.boxes.xyxy.cpu().numpy()
+                track_ids = result.boxes.id.cpu().numpy().astype(int)
+                
+                for box, track_id in zip(boxes, track_ids):
+                    tracks.append({
+                        'id': int(track_id),
+                        'bbox': box  # [x1, y1, x2, y2]
+                    })
+        
+        return tracks
 
     def _get_bbox_center(self, bbox):
         """Get center of bounding box."""
